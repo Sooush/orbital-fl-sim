@@ -1,5 +1,7 @@
 from .env import SatelliteEnv, EnvConfig, Gradient, DrainEvent
 from .policies import power_oblivious, make_power_weighted, contact_gated
+from .markov import build_transition_matrix, stationary_distribution, compute_pready, run_stationary_analysis
+from .queueing import QueueParams, mean_staleness, mean_queue_length, effective_load, is_stable
 
 __all__ = [
     "SatelliteEnv",
@@ -9,4 +11,13 @@ __all__ = [
     "power_oblivious",
     "make_power_weighted",
     "contact_gated",
+    "build_transition_matrix",
+    "stationary_distribution",
+    "compute_pready",
+    "run_stationary_analysis",
+    "QueueParams",
+    "mean_staleness",
+    "mean_queue_length",
+    "effective_load",
+    "is_stable",
 ]
