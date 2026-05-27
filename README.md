@@ -1,75 +1,112 @@
 # orbital-fl-sim
 
-Simulator for energy-aware queueing and bandwidth allocation in on-orbit federated learning.
+Simulator and analytical model for energy-aware queueing and bandwidth allocation in on-orbit federated learning.
 
-Companion code for the EE 384S Spring 2026 project: *Energy-Aware Queueing and
-Bandwidth Allocation for On-Orbit Federated Learning* (Anbhuarasan, Khan, Gupta).
+Companion code for the EE 384S Spring 2026 project: *Energy-Aware Queueing and Bandwidth Allocation for On-Orbit Federated Learning* (Anbhuarasan, Khan, Gupta, Jonathan).
 
-## What's here (v0)
-
-A single-satellite Markov environment that exercises the full state space from
-the proposal: battery, illumination, ISL contact. Three baseline policies and a
-sanity-check script that produces the first comparison plot.
+## Repository layout
 
 ```
 orbital-fl-sim/
 ├── src/orbital_fl/
-│   ├── env.py          # SatelliteEnv + EnvConfig
-│   ├── policies.py     # power_oblivious, contact_gated, power_weighted
+│   ├── env.py              # SatelliteEnv + EnvConfig — discrete-time (B,I,C,Q) MDP
+│   ├── policies.py         # power_oblivious, contact_gated, power_weighted baselines
+│   ├── markov.py           # stationary analysis: build P, solve pi*P=pi, P_ready, beta
+│   ├── queueing.py         # analytical M/M/1 vacation model: E[T], E[L], batch penalty
 │   └── __init__.py
 ├── scripts/
-│   └── sanity_check.py # rolls out each policy, saves figures/sanity_check.png
+│   ├── sanity_check.py     # baseline policy rollout, figures/sanity_check.png
+│   └── queueing_analysis.py# Markov + queueing sweep, figures/queueing_analysis.png
 ├── figures/
+│   ├── sanity_check.png
+│   └── queueing_analysis.png
 └── README.md
 ```
 
 ## Quickstart
 
 ```bash
+# 1. Create a virtual environment (required — do not install globally)
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+
+# 2. Install dependencies
 pip install numpy matplotlib
+
+# 3. Run baseline policy comparison
 python scripts/sanity_check.py
+
+# 4. Run Markov stationary analysis + queueing model
+python scripts/queueing_analysis.py
 ```
 
-Output: console summary of avg reward / battery-dead fraction per policy, plus
-`figures/sanity_check.png`.
+Both scripts save figures to `figures/` and print a console summary.
 
 ## Model
 
-State: $S_t = (B_t, I_t, C_t)$.
+### Simulator (`env.py`)
 
-Action: $a_t = (a_{\text{local}}, a_{\text{tx}}) \in [0,1]^2$.
+State: $S_t = (B_t, I_t, C_t, Q_t)$
+
+- $B_t \in \{0,\dots,B_{\max}\}$: discrete battery level
+- $I_t \in \{0,1\}$: illumination (0 = eclipse, 1 = sunlit)
+- $C_t \in \{0,1\}$: ISL contact (0 = disconnected, 1 = connected)
+- $Q_t \in \{0,\dots,Q_{\max}\}$: gradient queue length
+
+Action: $a_t = (a_{\text{local}}, a_{\text{tx}}) \in [0,1]^2$
 
 Energy (Harvest-Use-Store):
-$$\Delta E = \eta \cdot I - P_{\text{tx}} \cdot a_{\text{tx}} \cdot C - P_{\text{gpu}} \cdot a_{\text{local}} - P_{\text{base}}$$
+$$\Delta E = \eta I - P_{\text{tx}} a_{\text{tx}} C - P_{\text{gpu}} a_{\text{local}} - P_{\text{base}}$$
 $$B_{t+1} = \text{clip}(B_t + \Delta E, 0, B_{\max})$$
 
-Illumination and contact are independent two-state Markov chains, parameterized
-in `EnvConfig`. Units are abstract; calibrate once the stationary analysis tells
-us what regime is interesting.
+Gradient arrivals are Poisson($\lambda_g \cdot a_{\text{local}}$), gated by $B_t > B_{\text{crit}}$.  
+Service: up to $\lfloor a_{\text{tx}} \cdot \mu \rfloor$ gradients drained per slot when $C_t = 1$ and $B_t > B_{\text{crit}}$.
 
-The `contact_gated` baseline recovers the original deterministic energy equation
-in the proposal exactly (`a_local = 1 - C`, `a_tx = C`), which is useful as a
-sanity check against Nimalan's stationary analysis.
+Each drained gradient emits a `DrainEvent(arrival_time, drain_time, sender_id, size)` — the schema consumed by the queueing analysis.
+
+### Markov chain analysis (`markov.py`)
+
+Builds the $(B_{\max}+1) \times 2 \times 2$ transition matrix under the **contact-gated policy** ($a_{\text{local}} = 1-C$, $a_{\text{tx}} = C$), which recovers the deterministic energy equation from the paper. Solves $\pi P = \pi$ by linear system and extracts:
+
+- **$P_{\text{ready}}$** $= P(B > B_{\text{crit}},\, C=1)$: steady-state server uptime
+- **$\beta$**: effective per-slot link-recovery probability (computed from the stationary flow into the ready set)
+
+> **Calibration note.** The default `EnvConfig` has $\eta = 2.0$, which gives $\mathbb{E}[\Delta E] < 0$ in all states and causes the battery to drain to zero (degenerate case, $P_{\text{ready}} \to 0$). The analysis scripts use a calibrated config with $\eta = 4.0$, which yields a proper stationary battery distribution. Set $\eta$ so that $\eta \cdot P(\text{sunlit}) > P_{\text{tx}} \cdot P(C{=}1) + P_{\text{gpu}} \cdot P(C{=}0) + P_{\text{base}}$.
+
+### Queueing model (`queueing.py`)
+
+Each satellite's gradient buffer is an M/M/1 queue with a two-state on-off server. Server uptime is $P_{\text{ready}}$; off-periods are geometric with recovery probability $\beta$.
+
+**Stability:** $\rho_{\text{eff}} = \lambda / (\mu \cdot P_{\text{ready}}) < 1$
+
+**Mean staleness** (M/G/1 vacation decomposition, Doshi 1986):
+$$\mathbb{E}[T] = \underbrace{\frac{1}{\mu - \lambda}}_{\text{M/M/1 sojourn}} + \underbrace{\frac{2-\beta}{2\beta}}_{\text{residual off-period}}$$
+
+This is a conservative upper bound on the true staleness (overestimates because the multiple-vacation model is more pessimistic than the on-off server model).
+
+**DiLoCo batch penalty** (M$^{[X]}$/M/1 correction):
+$$\mathbb{E}[T]_{\text{batch}} = \mathbb{E}[T] + \frac{k-1}{2(\mu - \lambda)}$$
+
+**Numerical results** (calibrated config, $\eta=4.0$, $\lambda=0.5$, $\mu=2$):
+
+| Quantity | Value |
+|---|---|
+| $P_{\text{ready}}$ | 0.437 |
+| $\beta$ | 0.049 |
+| $\rho_{\text{eff}}$ | 0.572 |
+| $\mathbb{E}[T]$ analytical | 20.7 slots |
+| $\mathbb{E}[T]$ empirical (8000-step rollout) | 15.9 slots |
 
 ## Next steps
 
-In rough priority order:
-
-1. **Gradient queue.** Replace the hand-tuned reward proxy with a real buffer:
-   gradients arrive at some rate, drain at `a_tx * C * mu`, reward = drained.
-   This is also the interface point with Vidur's queueing-network model.
-2. **Proper constraint signal.** Separate cost stream
-   $c_t = \mathbb{1}[B_t < B_{\text{crit}}]$ so the CMDP solver treats energy
-   neutrality as a hard constraint, not reward shaping.
-3. **Lagrangian-relaxation solver.** Sweep $\lambda$, value-iterate on the
-   discretized state space, plot the Pareto frontier of throughput vs. energy
-   deficit. This is the headline figure.
-4. **Robustness sweeps.** Gradient compression ratio, constellation size (once
-   multi-satellite is in), ECC bit-flip noise.
-5. **JAX port.** Only if rollout speed becomes the bottleneck.
+1. **Lagrangian-relaxation CMDP solver.** Value-iterate on the discretized $(B,I,C,Q)$ state space, sweep the energy-penalty Lagrange multiplier, and plot the throughput vs. energy-deficit Pareto frontier.
+2. **Robustness sweeps.** Gradient compression ratio, ECC bit-flip noise, constellation size.
+3. **Multi-satellite extension.** Add $N$ independent `SatelliteEnv` instances, verify product-form factorization empirically, and test with correlated eclipse schedules.
+4. **JAX port.** Only if rollout speed becomes the bottleneck.
 
 ## Team
 
 - Nimalan Anbhuarasan — Markov chain stationary analysis
-- Sarosh Khan — CMDP, simulator, experiments (this repo)
-- Vidur Gupta — Queueing-network model of ISL aggregation
+- Sarosh Khan — CMDP, simulator (`env.py`, `policies.py`, `sanity_check.py`)
+- Vidur Gupta — Queueing model (`markov.py`, `queueing.py`, `queueing_analysis.py`)
+- Jonathan — Report structure and slides

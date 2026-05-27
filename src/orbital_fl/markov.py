@@ -81,14 +81,14 @@ def stationary_distribution(P: np.ndarray) -> np.ndarray:
 
 def compute_pready(pi: np.ndarray, cfg: EnvConfig) -> float:
     """
-    P_ready = P(B >= B_crit, C = 1)
+    P_ready = P(B > B_crit, C = 1)
 
     The marginal probability that the satellite has sufficient charge
-    and an active ISL to push gradient updates, as defined in the
-    stationary analysis section of the paper.
+    and an active ISL to push gradient updates. Uses strict inequality
+    B > B_crit to match the `had_energy = B > B_crit` gate in env.py.
     """
     p = 0.0
-    for b in range(cfg.B_crit, cfg.B_max + 1):
+    for b in range(cfg.B_crit + 1, cfg.B_max + 1):  # strictly greater than B_crit
         for i in range(2):
             p += pi[_idx(b, i, 1)]  # c = 1
     return float(p)
@@ -107,7 +107,7 @@ def compute_beta(pi: np.ndarray, P: np.ndarray, cfg: EnvConfig) -> float:
     B_max = cfg.B_max
     ready = {
         _idx(b, i, 1)
-        for b in range(cfg.B_crit, B_max + 1)
+        for b in range(cfg.B_crit + 1, B_max + 1)  # strictly greater than B_crit
         for i in range(2)
     }
     not_ready = [s for s in range(P.shape[0]) if s not in ready]

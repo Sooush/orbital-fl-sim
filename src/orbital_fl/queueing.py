@@ -76,18 +76,26 @@ def vacation_penalty(q: QueueParams) -> float:
 def mean_staleness_batch(q: QueueParams, k: int) -> float:
     """
     Mean staleness under DiLoCo-style batching: k local SGD steps per sync.
-    Gradients arrive in batches of size k (M^[X]/M/1 queue).
+    Gradients arrive in batches of size k (M^[X]/M/1 queue with vacation).
 
-    E[T]_batch = E[T] + lam * k * (k - 1) / (2 * mu * (1 - rho_eff))
+    For M^[X]/M/1 (batch Poisson, rate Lambda=lam/k, batch size k, service
+    rate mu), E[L] = rho/(1-rho) + Lambda*k*(k-1)/(2*mu*(1-rho)) where
+    rho = lam/mu. Applying Little's law E[T] = E[L]/lam yields:
 
-    The correction term is the Pollaczek-Khinchine bulk-arrival penalty.
+        E[T]_{batch} = (k+1) / (2*(mu-lam))  + vacation penalty
+
+    so the correction over k=1 is:
+
+        delta = (k-1) / (2*(mu - lam))
+
+    Note: uses actual load rho = lam/mu, not rho_eff, because the batch
+    correction is a property of the server capacity, not the server uptime.
     """
     if k <= 1:
         return mean_staleness(q)
-    rho = effective_load(q)
-    if rho >= 1.0:
+    if not is_stable(q):
         return float("inf")
-    pk_correction = q.lam * k * (k - 1) / (2.0 * q.mu * (1.0 - rho))
+    pk_correction = (k - 1) / (2.0 * (q.mu - q.lam))
     return mean_staleness(q) + pk_correction
 
 
