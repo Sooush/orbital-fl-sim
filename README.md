@@ -13,13 +13,16 @@ orbital-fl-sim/
 │   ├── policies.py         # power_oblivious, contact_gated, power_weighted baselines
 │   ├── markov.py           # stationary analysis: build P, solve pi*P=pi, P_ready, beta
 │   ├── queueing.py         # analytical M/M/1 vacation model: E[T], E[L], batch penalty
+│   ├── cmdp.py             # Lagrangian-relaxation CMDP: build_model, VI, pareto_sweep
 │   └── __init__.py
 ├── scripts/
 │   ├── sanity_check.py     # baseline policy rollout, figures/sanity_check.png
-│   └── queueing_analysis.py# Markov + queueing sweep, figures/queueing_analysis.png
+│   ├── queueing_analysis.py# Markov + queueing sweep, figures/queueing_analysis.png
+│   └── cmdp_sweep.py       # CMDP Pareto sweep, figures/cmdp_pareto.png
 ├── figures/
 │   ├── sanity_check.png
-│   └── queueing_analysis.png
+│   ├── queueing_analysis.png
+│   └── cmdp_pareto.png
 └── README.md
 ```
 
@@ -38,9 +41,12 @@ python scripts/sanity_check.py
 
 # 4. Run Markov stationary analysis + queueing model
 python scripts/queueing_analysis.py
+
+# 5. Run CMDP Pareto sweep (bandwidth-allocation policy optimisation)
+python scripts/cmdp_sweep.py
 ```
 
-Both scripts save figures to `figures/` and print a console summary.
+All scripts save figures to `figures/` and print a console summary.
 
 ## Model
 
@@ -97,16 +103,41 @@ $$\mathbb{E}[T]_{\text{batch}} = \mathbb{E}[T] + \frac{k-1}{2(\mu - \lambda)}$$
 | $\mathbb{E}[T]$ analytical | 20.7 slots |
 | $\mathbb{E}[T]$ empirical (8000-step rollout) | 15.9 slots |
 
+### CMDP solver (`cmdp.py`)
+
+Formulates the bandwidth-allocation problem as a Constrained MDP over the full $(B, I, C, Q)$ state space.
+
+**State:** $(B, I, C, Q)$ with $Q_{\max}^{\text{CMDP}} = 20$ — total 1,764 states.
+
+**Actions:** $(a_{\text{local}}, a_{\text{tx}}) \in \{0,1\}^2$ — idle, train-only, tx-only, train+tx.
+
+**Reward:** gradients drained per slot. **Cost:** $\mathbf{1}[B < B_{\text{crit}}]$.
+
+**Lagrangian relaxation:** for each $\lambda$, solve:
+$$V^\lambda(s) = \max_a\bigl[R(s,a) - \lambda\,\mathcal{C}(s) + \gamma\sum_{s'} P(s'|s,a)\,V^\lambda(s')\bigr]$$
+via vectorised value iteration ($\gamma=0.99$, convergence < 1000 iterations).
+
+**Pareto results** (calibrated config, 5000-step rollout):
+
+| Policy | Throughput (grad/slot) | Cost fraction |
+|---|---|---|
+| power\_oblivious | 0.223 | 0.531 |
+| contact\_gated   | 0.103 | 0.325 |
+| power\_weighted  | 0.253 | 0.049 |
+| CMDP ($\lambda=0$)    | 0.340 | 0.228 |
+| CMDP ($\lambda=0.05$) | **0.323** | **0.000** |
+
+The CMDP policy Pareto-dominates all heuristic baselines: it achieves 0.323 grad/slot at zero energy violations, vs. 0.253 for the best heuristic — a **28% throughput improvement** at strictly lower energy cost.
+
 ## Next steps
 
-1. **Lagrangian-relaxation CMDP solver.** Value-iterate on the discretized $(B,I,C,Q)$ state space, sweep the energy-penalty Lagrange multiplier, and plot the throughput vs. energy-deficit Pareto frontier.
-2. **Robustness sweeps.** Gradient compression ratio, ECC bit-flip noise, constellation size.
-3. **Multi-satellite extension.** Add $N$ independent `SatelliteEnv` instances, verify product-form factorization empirically, and test with correlated eclipse schedules.
-4. **JAX port.** Only if rollout speed becomes the bottleneck.
+1. **Robustness sweeps.** Gradient compression ratio, ECC bit-flip noise, constellation size.
+2. **Multi-satellite extension.** Add $N$ independent `SatelliteEnv` instances, verify product-form factorization empirically, and test with correlated eclipse schedules.
+3. **JAX port.** Only if rollout speed becomes the bottleneck.
 
 ## Team
 
 - Nimalan Anbhuarasan — Markov chain stationary analysis
 - Sarosh Khan — CMDP, simulator (`env.py`, `policies.py`, `sanity_check.py`)
-- Vidur Gupta — Queueing model (`markov.py`, `queueing.py`, `queueing_analysis.py`)
+- Vidur Gupta — Queueing model and CMDP (`markov.py`, `queueing.py`, `cmdp.py`, `queueing_analysis.py`, `cmdp_sweep.py`)
 - Jonathan — Report structure and slides
