@@ -1,0 +1,20 @@
+Merged arrival rate vs N (independent chains):
+  N= 1  merged= 0.298  N*lam= 0.300  per_sat_thr=0.298
+  N= 2  merged= 0.597  N*lam= 0.600  per_sat_thr=0.299
+  N= 4  merged= 1.192  N*lam= 1.200  per_sat_thr=0.298
+  N= 8  merged= 2.406  N*lam= 2.400  per_sat_thr=0.301
+  N=16  merged= 4.795  N*lam= 4.800  per_sat_thr=0.300
+
+Product-form diagnostics at independence (rho_corr=0):
+  N=2  queue_corr=-0.022  TV=0.097  (both near 0 confirm product form)
+
+Correlated-eclipse breakdown (N=4):
+  rho_corr  queue_corr      TV  agg_delay  indep_pred
+      0.00      -0.056   0.096       3.31        1.25
+      0.20      +0.023   0.103       3.79        1.25
+      0.40      +0.052   0.102       4.13        1.25
+      0.60      +0.053   0.120       4.53        1.25
+      0.80      +0.170   0.149       6.17        1.25
+      1.00      +0.703   0.325      12.08        1.25
+
+Saved figure: /Users/vidurgupta/Downloads/EE384S/orbital-fl-sim/figures/constellation.png

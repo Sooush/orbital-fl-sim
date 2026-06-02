@@ -1,0 +1,24 @@
+P_ready             : 0.4372
+beta (recovery)     : 0.0488   (geometric off-period mean 1/beta = 20.50)
+off-period E[V]     : 20.50   E[V^2] = 1252.5   cv^2 = 1.98
+off-period residual : 30.55   (geometric residual = 20.00)
+
+Sampling 16 server paths (20000 slots each)...
+
+--- Mean staleness at lam=0.5 (rho_eff=0.572) ---
+  vacation (geometric beta)        : 20.67 slots
+  vacation (true off-period moment): 31.22 slots
+  exact joint Markov-modulated     : 38.94 slots  (overflow 4.0e-10)
+  empirical (16-seed Poisson rollout) : 39.11 +/- 2.88 slots
+
+--- Staleness vs load ---
+  lam  rho_eff     geom    exact     empirical (95% CI)
+ 0.10    0.114    20.53    19.31       19.07 +/-  1.08
+ 0.20    0.229    20.55    21.96       21.59 +/-  1.38
+ 0.30    0.343    20.59    25.60       25.31 +/-  1.54
+ 0.40    0.457    20.62    30.84       30.65 +/-  1.90
+ 0.50    0.572    20.67    38.94       39.11 +/-  2.88
+ 0.60    0.686    20.71    53.02       52.40 +/-  5.01
+ 0.70    0.801    20.77    83.19       79.92 +/-  9.93
+
+Saved figure: /Users/vidurgupta/Downloads/EE384S/orbital-fl-sim/figures/queueing_analysis.png

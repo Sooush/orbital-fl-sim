@@ -1,0 +1,21 @@
+Compression sweep (mu_eff = effective drain capacity):
+  mu_eff=2  E[T]= 38.94  (instant-service floor ~ 17.6)
+  mu_eff=3  E[T]= 26.91  (instant-service floor ~ 17.6)
+  mu_eff=4  E[T]= 23.37  (instant-service floor ~ 17.6)
+  mu_eff=5  E[T]= 21.70  (instant-service floor ~ 17.6)
+  mu_eff=6  E[T]= 20.72  (instant-service floor ~ 17.6)
+  mu_eff=8  E[T]= 19.64  (instant-service floor ~ 17.6)
+  mu_eff=10  E[T]= 19.05  (instant-service floor ~ 17.6)
+
+Fading sweep (ISL link-loss probability):
+  p_link_lose=0.02  P_ready=0.546  rho_eff=0.457  E[T]=26.60
+  p_link_lose=0.04  P_ready=0.468  rho_eff=0.534  E[T]=34.38
+  p_link_lose=0.06  P_ready=0.410  rho_eff=0.610  E[T]=44.20
+  p_link_lose=0.08  P_ready=0.364  rho_eff=0.686  E[T]=57.95
+  p_link_lose=0.10  P_ready=0.328  rho_eff=0.762  E[T]=79.73
+  p_link_lose=0.13  P_ready=0.285  rho_eff=0.877  E[T]=160.76
+  p_link_lose=0.16  P_ready=0.252  rho_eff=0.991  E[T]=inf
+  p_link_lose=0.20  P_ready=0.219  rho_eff=1.144  E[T]=inf
+  fading limit (rho_eff = 1): p_loss ~ 0.162
+
+Saved figure: /Users/vidurgupta/Downloads/EE384S/orbital-fl-sim/figures/robustness_sweeps.png

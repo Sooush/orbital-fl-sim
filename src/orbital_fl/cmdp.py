@@ -165,13 +165,40 @@ def rollout_policy(env_cfg: EnvConfig, pi, Q_max: int,
     return tr / horizon, tc / horizon
 
 
+def rollout_policy_ci(env_cfg: EnvConfig, pi, Q_max: int,
+                      horizon: int = 5000, seeds=range(20)):
+    """
+    Multi-seed evaluation of a flat policy. Runs one rollout per seed and
+    aggregates throughput and energy-floor cost into means with 95% confidence
+    intervals (normal approximation). Also reports the worst-case cost fraction
+    over the seed set, so a "zero violations" claim is shown to hold across seeds
+    rather than at a single lucky seed.
+    """
+    seeds = list(seeds)
+    thr = np.empty(len(seeds))
+    cost = np.empty(len(seeds))
+    for k, sd in enumerate(seeds):
+        thr[k], cost[k] = rollout_policy(env_cfg, pi, Q_max, horizon, seed=sd)
+    def ci(x):
+        return 1.96 * np.std(x, ddof=1) / np.sqrt(len(x)) if len(x) > 1 else 0.0
+    return {
+        "thr_mean": float(thr.mean()), "thr_ci": float(ci(thr)),
+        "cost_mean": float(cost.mean()), "cost_ci": float(ci(cost)),
+        "cost_max": float(cost.max()), "n_seeds": len(seeds),
+    }
+
+
 # ---------- Pareto sweep ---------------------------------------------------- #
 
 def pareto_sweep(env_cfg: EnvConfig, cmdp_cfg: CMDPConfig,
-                 lam_values, horizon: int = 5000, seed: int = 0):
+                 lam_values, horizon: int = 5000, seeds=range(20)):
     """
-    Build model once, then for each lam: solve VI + rollout.
-    Returns ndarray shape (len(lam_values), 3): [lam, throughput, cost_frac].
+    Build the model once, then for each lam solve value iteration and evaluate
+    the greedy policy over a set of seeds.
+
+    Returns ndarray shape (len(lam_values), 5):
+        [lam, thr_mean, thr_ci, cost_mean, cost_ci]
+    so every Pareto point carries a 95% confidence interval.
     """
     print("Building CMDP model...", flush=True)
     R, Cost, T_idx, T_prob, n_s = build_model(env_cfg, cmdp_cfg)
@@ -183,8 +210,10 @@ def pareto_sweep(env_cfg: EnvConfig, cmdp_cfg: CMDPConfig,
         V  = value_iteration(R, Cost, T_idx, T_prob, n_s,
                              lam, cmdp_cfg.gamma, cmdp_cfg.tol, cmdp_cfg.max_iter)
         pi = extract_policy(R, Cost, T_idx, T_prob, V, n_s, lam, cmdp_cfg.gamma)
-        thr, cost = rollout_policy(env_cfg, pi, cmdp_cfg.Q_max, horizon, seed)
-        rows.append((lam, thr, cost))
-        print(f"  lam={lam:6.2f}  thr={thr:.3f}  cost={cost:.3f}", flush=True)
+        ev = rollout_policy_ci(env_cfg, pi, cmdp_cfg.Q_max, horizon, seeds)
+        rows.append((lam, ev["thr_mean"], ev["thr_ci"], ev["cost_mean"], ev["cost_ci"]))
+        print(f"  lam={lam:6.2f}  thr={ev['thr_mean']:.3f}+/-{ev['thr_ci']:.3f}  "
+              f"cost={ev['cost_mean']:.3f}+/-{ev['cost_ci']:.3f}  cost_max={ev['cost_max']:.3f}",
+              flush=True)
 
     return np.array(rows)

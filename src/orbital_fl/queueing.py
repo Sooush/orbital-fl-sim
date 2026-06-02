@@ -73,6 +73,44 @@ def vacation_penalty(q: QueueParams) -> float:
     return (2.0 - q.beta) / (2.0 * q.beta)
 
 
+def mean_staleness_general(lam: float, mu: float, e_v: float, e_v2: float) -> float:
+    """
+    Vacation staleness with an arbitrary off-period distribution.
+
+    The single-geometric model in mean_staleness assumes the off-period is
+    geometric with rate beta, giving residual (2-beta)/(2*beta). The true
+    off-period of the energy-channel chain is two-phase (a fast contact-limited
+    branch and a slow battery-limited branch), so its second moment e_v2 is far
+    larger than a geometric of the same mean. Passing the exact moments
+    (from markov.offperiod_moments) gives the corrected residual e_v2/(2*e_v):
+
+        E[T] = 1/(mu - lam)  +  e_v2 / (2 * e_v)
+
+    This narrows but does not close the gap to the exact joint-chain solve,
+    because the M/G/1 decomposition still treats the in-service and off-period
+    delays as separable, which the genuine queue-backlog correlation violates.
+    """
+    if lam >= mu:
+        return float("inf")
+    return 1.0 / (mu - lam) + e_v2 / (2.0 * e_v)
+
+
+def discrete_time_backlog(lam: float, mu: float) -> float:
+    """
+    Mean backlog of the always-on discrete-time slotted queue (EE 384S Lec 5),
+
+        B_bar = lam * (1 - mu) / (mu - lam),     lam < mu,
+
+    where lam and mu are per-slot arrival and service probabilities. This is the
+    no-intermittency reference: it is what the gradient buffer would experience
+    if the ISL were always available (P_ready = 1). The gap between this and the
+    intermittent-server staleness isolates the cost of ISL outages.
+    """
+    if lam >= mu:
+        return float("inf")
+    return lam * (1.0 - mu) / (mu - lam)
+
+
 def mean_staleness_batch(q: QueueParams, k: int) -> float:
     """
     Mean staleness under DiLoCo-style batching: k local SGD steps per sync.
